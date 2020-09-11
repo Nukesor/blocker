@@ -21,6 +21,7 @@ pub enum SubCommand {
     Block {
         bssid: String,
         interface: String,
-        excluded_macs: Vec<String>,
+        #[structopt(short, long)]
+        excluded_macs: Option<Vec<String>>,
     },
 }

